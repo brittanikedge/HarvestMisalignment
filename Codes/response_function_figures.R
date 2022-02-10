@@ -58,5 +58,4 @@ response_seed
 # saveRDS(response_seed, "~/Box/Machine_Misalignment/Results/response_seed.rds")
 
 library(patchwork)
-(response_low+ response_mid) /
-  (response_high + response_seed)
+(response_low + response_mid + response_high) 

@@ -29,26 +29,10 @@ source("https://raw.githubusercontent.com/brittanikedge/DIFM/main/Functions.R")
 
 #### Mismatch Seed Responses ####
 
-boundary <- st_read(here("Data/Wendte_LaueLib80_2020/Raw", "boundary.shp")) %>%
-  st_transform_utm()
+trial_grids <- readRDS("Data/Wendte_LaueLib80_2020/Raw/trial-grids-mismatch.rds")
+trial_grids <- dplyr::rename(trial_grids, "td_grid_id" = "td_grd_", "strip_id" = "strip_d")
 
-abline <- st_read(here("Data/Wendte_LaueLib80_2020/Raw", "ab-line.shp")) %>%
-  st_transform_utm()
-# 
-# perhaps these are not in feet but meters
-trial_grids <- make_trial_grids(field = boundary,
-                               ab_line = abline,
-                                plot_width = 18.288,
-                              cell_height = 30,
-                               headland_length = 0) %>%
- mutate(td_grid_id = paste0(strip_id, "_", cell_id))
-
-harvester_polygons <- make_trial_grids(field = boundary,
-                                 ab_line = abline,
-                                  plot_width = 18.288,
-                                  cell_height = 2,
-                                  headland_length = 0) %>%
-  mutate(td_grid_id = paste0(strip_id, "_", cell_id))
+harvester_polygons <- readRDS("Data/Wendte_LaueLib80_2020/Raw/harvester-polygons-mismatch.rds")
 
 # keep the same setup for the machine, treatments and prices
 
@@ -58,7 +42,7 @@ s_price <- 4.50
 
 c_price <- c(5.62)
 # ys_function <- c("low_response", "middle_response", "high_response")
-# max_dev <- c(5, 10, 20, 30, 40)
+# max_dev <- c(20, 30, 40, 100)
 
 ys_function <- c("seed_response")
 max_dev <- c(2, 4, 6, 100)
@@ -219,6 +203,11 @@ saveRDS(final_results, here("Results", "deterministic_data_mismatch_seed.rds"))
 saveRDS(det_est_data, here("Results", "deterministic_est_mismatch_seed.rds"))
 
 #### Mismatch Nitrogen Responses ####
+trial_grids <- readRDS("Data/Wendte_LaueLib80_2020/Raw/trial-grids-mismatch.rds")
+trial_grids <- dplyr::rename(trial_grids, "td_grid_id" = "td_grd_", "strip_id" = "strip_d")
+
+harvester_polygons <- readRDS("Data/Wendte_LaueLib80_2020/Raw/harvester-polygons-mismatch.rds")
+
 n_price <- .5
 s_price <- 4.50 
 c_price <- c(5.62)
@@ -330,7 +319,14 @@ profit_data <- data_cases %>%
   rowwise() %>% 
   mutate(
     profit = list(gen_prof_diff(yield_type = ys_type, error = error_degree, case = alignment_case, rates = rate_types, crop_price = c_price, dev_max = max_dev, opt_n = opt_n))
-  ) %>% 
+  ) 
+
+problem_data <- profit_data[26,] %>% 
+  ungroup() %>% 
+  data.table()  %>%
+  unnest(profit)
+
+profit_data <- profit_data[-26,] %>% 
   ungroup() %>% 
   data.table()  %>%
   unnest(profit)
@@ -351,7 +347,6 @@ det_est_data <- data_cases %>%
 saveRDS(final_results, here("Results", "deterministic_clean_data_mismatch_nitrogen.rds"))
 saveRDS(det_est_data, here("Results", "deterministic_clean_est_mismatch_nitrogen.rds"))
 saveRDS(profit_data, here("Results", "deterministic_clean_profit_mismatch_nitrogen.rds"))
-
 
 final_results <- all_results %>%
   dplyr::select(- coverage_pct_data) %>%
@@ -539,9 +534,13 @@ saveRDS(final_results, here("Results", "deterministic_data_others_seed.rds"))
 saveRDS(det_est_data, here("Results", "deterministic_est_others_seed.rds"))
 
 ##### Angle and Shift Nitrogen Responses #####
+trial_grids <- readRDS("Results/trial_grids.rds")
+harvester_polygons <- readRDS("Results/harvester_polygons.rds")
+
 n_price <- .5
 s_price <- 4.50 
 c_price <- c(5.62)
+
 rate_types <- c("rates_low", "rates_center", "rates_high")
 alignment_case <- c("angle", "mis-alignment")
 error_degree <- c(0, 10, 30)

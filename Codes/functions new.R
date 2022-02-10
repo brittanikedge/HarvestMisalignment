@@ -858,7 +858,7 @@ get_coverage_pct <- function(harvester_grids, case, error) {
     filter(geom_type == "POLYGON") %>% 
     data.table() %>% 
     .[, pct := area / sum(area), by = harvester_id] %>% 
-    .[pct > 0.05,  ] %>% 
+    # .[pct > 0.05,  ] %>% 
     .[, .(pct, td_grid_id, harvester_id, X, Y)] 
   # %>% 
    # .[!(td_grid_id == "headland"), ] 
@@ -911,11 +911,11 @@ gen_coefs <- function(mean, psill, range, coef_name, nsim, xy) {
 #/*=================================================*/
 get_sim_data <- function(trial_design, coverage_data, ys_type, error_degree, rates_ls, opt_n){
   # trial_design = trial_grids
-  # coverage_data = data_cases$coverage_pct_data[[1]]
-  # ys_type = data_cases$ys_type[[1]]
-  # rates_ls = data_cases$rates_ls[[1]]
-  # opt_n = data_cases$opt_n[[1]]
-  # error_degree = data_cases$error_degree[[1]]
+  # coverage_data = data_cases$coverage_pct_data[[2]]
+  # ys_type = data_cases$ys_type[[2]]
+  # rates_ls = data_cases$rates_ls[[2]]
+  # opt_n = data_cases$opt_n[[2]]
+  # error_degree = data_cases$error_degree[[2]]
   
   exp_design <- assign_rates(
     filter(trial_design, td_grid_id != "headland"), 
@@ -943,8 +943,10 @@ get_sim_data <- function(trial_design, coverage_data, ys_type, error_degree, rat
     reg_data <- design_whole[coverage_data, on = "td_grid_id"] %>% 
       .[, .(
         rate = sum(pct * rate), 
-        yield = sum(pct * yield)),
-        by = harvester_id] 
+        yield = sum(pct * yield),
+        tot_pct = sum(pct)),
+        by = harvester_id] %>%
+      filter(., tot_pct > 0.99)
   }
   return(reg_data)
 }
@@ -956,6 +958,8 @@ get_cleaned_data <- function(trial_design, coverage_data, ys_type, error_degree,
   # rates_ls = data_cases$rates_ls[[4]]
   # opt_n = data_cases$opt_n[[4]]
   # error_degree = data_cases$error_degree[[4]]
+  # opt_n = data_cases$opt_n[[4]]
+  # max_dev = 2
 
   exp_design <- assign_rates(
     filter(trial_design, td_grid_id != "headland"), 
@@ -972,6 +976,7 @@ get_cleaned_data <- function(trial_design, coverage_data, ys_type, error_degree,
       .[, input_weighted := sum(pct * rate), by = harvester_id] %>%
       .[, dev_input_rate := sum(abs(pct * (rate - input_weighted) / tot_sub_pct)), by = harvester_id] %>%
       filter(dev_input_rate < max_dev) %>%
+      filter(tot_sub_pct > 0.99) %>%
       select(c(harvester_id)) %>%
       unique(by = "harvester_id")
   
@@ -995,15 +1000,14 @@ get_cleaned_data <- function(trial_design, coverage_data, ys_type, error_degree,
 find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, rates_ls, opt_n, c_price, max_dev){
   # num_iterations = 5
   # trial_design = trial_grids
-  # coverage_data = data_cases$coverage_pct_data[[46]]
-  # ys_type = data_cases$ys_type[[46]]
-  # error_degree = data_cases$error_degree[[46]]
-  # rates_ls = data_cases$rates_ls[[46]]
-  # opt_n = data_cases$opt_n[[46]]
-  # c_price = data_cases$c_price[[46]]
-  # max_dev = data_cases$max_dev[[46]]
+  # coverage_data = data_cases$coverage_pct_data[[160]]
+  # ys_type = data_cases$ys_type[[160]]
+  # error_degree = data_cases$error_degree[[160]]
+  # rates_ls = data_cases$rates_ls[[160]]
+  # opt_n = data_cases$opt_n[[160]]
+  # c_price = data_cases$c_price[[160]]
+  # max_dev = data_cases$max_dev[[160]]
   # max_dev = 3
-  
   
   exp_design <- assign_rates(
     filter(trial_design, td_grid_id != "headland"), 
@@ -1012,24 +1016,16 @@ find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, r
     data.table() %>% 
     .[, .(td_grid_id, rate)]
   
-  # headland_design <- trial_design %>% 
-  #   filter(td_grid_id == "headland") %>% 
-  #   mutate(rate = rates_ls[[4]]) %>% 
-  #   data.table() %>% 
-  # .[, .(td_grid_id, rate)]
-  
   #--- need to add spatially correlated errors ---#
   if (ys_type == "seed_response"){
     design_whole <- exp_design %>% 
-      # .[, yield := gen_yield(ys_type, rate)]
-      .[, yield := gen_yield(ys_type, rate) + rnorm(nrow(.), sd = 20)] %>%
-      .[, rate := rate + rnorm(nrow(.), sd = 1)]
+      .[, rate := rate + rnorm(nrow(.), sd = 1)] %>%
+      .[, yield := gen_yield(ys_type, rate) + rnorm(nrow(.), sd = 20)] 
+
   }else{
     design_whole <- exp_design %>% 
-      # .[, yield := gen_yield(ys_type, rate)]
-      .[, yield := gen_yield(ys_type, rate) + rnorm(nrow(.), sd = 20)] %>%
-      .[, rate := rate + rnorm(nrow(.), sd = 7)]
-
+      .[, rate := rate + rnorm(nrow(.), sd = 7)] %>%
+      .[, yield := gen_yield(ys_type, rate) + rnorm(nrow(.), sd = 20)] 
   }
   
   ### Add spatial errors to yield on trial grid ### 
@@ -1043,7 +1039,7 @@ find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, r
   #--- m_error ---#
   m_error <- gen_coefs(
     mean = 0,
-    psill = 0.828,
+    psill = 400,
     range = sp_range,
     coef_name = "m_error_uncorrelated",
     nsim = 1,
@@ -1061,6 +1057,7 @@ find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, r
       .[, input_weighted := sum(pct * rate), by = harvester_id] %>%
       .[, dev_input_rate := sum(abs(pct * (rate - input_weighted) / tot_sub_pct)), by = harvester_id] %>%
       filter(dev_input_rate < max_dev) %>%
+      filter(tot_sub_pct > 0.99) %>%
       select(c(harvester_id)) %>%
       unique(by = "harvester_id")
   }else{
@@ -1069,6 +1066,7 @@ find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, r
       .[, input_weighted := sum(pct * rate), by = harvester_id] %>%
       .[, dev_input_rate := sum(abs(pct * (rate - input_weighted) / tot_sub_pct)), by = harvester_id] %>%
       filter(dev_input_rate < max_dev) %>%
+      filter(tot_sub_pct > 0.99) %>%
       select(c(harvester_id)) %>%
       unique(by = "harvester_id")
   }
@@ -1109,22 +1107,22 @@ find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, r
   ## cleaned dataset
   if (ys_type != "seed_response"){
     scam_res_clean <- try(withTimeout(scam(yield ~ s(rate, k = 5, bs = "micv"), data = reg_data_clean, optimizer =  "nlm.fd"),
-                           timeout = 60,
+                           timeout = 30,
                            onTimeout = "silent"))
   }else{
     scam_res_clean <- try(withTimeout(scam(yield ~ s(rate, k = 5, bs = "cv"), data = reg_data_clean, optimizer =  "nlm.fd"),
-                            timeout = 60,
+                            timeout = 30,
                             onTimeout = "silent"))
   }
   
   ## full dataset
   if (ys_type != "seed_response"){
     scam_res <- try(withTimeout(scam(yield ~ s(rate, k = 5, bs = "micv"), data = reg_data, optimizer =  "nlm.fd"),
-                                      timeout = 60,
+                                      timeout = 30,
                                       onTimeout = "silent"))
   }else{
     scam_res <- try(withTimeout(scam(yield ~ s(rate, k = 5, bs = "cv"), data = reg_data, optimizer =  "nlm.fd"),
-                                      timeout = 60,
+                                      timeout = 30,
                                       onTimeout = "silent"))
   }
 
@@ -1206,8 +1204,8 @@ find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, r
       prof_opt <- gen_profit(ys_type, opt_n, c_price, n_price, s_price)
       profit_diff <- prof_opt - prof_est
       
-      opt_n_est_clean <- NA
-      profit_diff_clean <- NA
+      opt_n_est_clean <- " "
+      profit_diff_clean <- " "
       
     }else{
       opt_n_est <- data.table(
@@ -1226,13 +1224,13 @@ find_opt_n_est <- function(trial_design, coverage_data, ys_type, error_degree, r
     prof_opt <- gen_profit(ys_type, opt_n, c_price, n_price, s_price)
     profit_diff <- prof_opt - prof_est
     
-    opt_n_est_clean <- NA
-    profit_diff_clean <- NA
+    opt_n_est_clean <- " "
+    profit_diff_clean <- " "
   }else{
-    opt_n_est <- NA
-    profit_diff <- NA
-    opt_n_est_clean <- NA
-    profit_diff_clean <- NA
+    opt_n_est <- " "
+    profit_diff <- " "
+    opt_n_est_clean <- " "
+    profit_diff_clean <- " "
   }
   
   results <- as.data.frame(matrix(c(obs_total, obs_clean, opt_n_est, opt_n_est_clean, profit_diff, profit_diff_clean), ncol = 6, nrow = 1)) %>%
@@ -1251,7 +1249,6 @@ run_sim <- function(num_iterations, trial_design, coverage_data, ys_type, error_
 
   return(sim_results)
 }
-
 
 get_harvest <- function(harvester_grids, case, error) {
   
@@ -1296,6 +1293,17 @@ get_harvest <- function(harvester_grids, case, error) {
 # rates = "rates_low"
 
 gen_prof_diff <- function(yield_type, error, case, rates, crop_price, dev_max, opt_n){
+  # trial_design = trial_grids
+  # coverage_data = data_cases$coverage_pct_data[[4]]
+  # yield_type = data_cases$ys_type[[4]]
+  # rates = data_cases$rates_ls[[4]]
+  # opt_n = data_cases$opt_n[[4]]
+  # error = data_cases$error_degree[[4]]
+  # crop_price = data_cases$c_price[[4]]
+  # dev_max = 2
+  
+  perc_clean <- nrow(subset(final_results_clean, ys_type == yield_type & error_degree == error & alignment_case == case & rate_types == rates & c_price == crop_price & max_dev == dev_max))/nrow(subset(final_results, ys_type == yield_type & error_degree == error & alignment_case == case & rate_types == rates & c_price == crop_price & max_dev == dev_max))
+  
   if (yield_type == "seed_response"){
     scam_res <- try(withTimeout(scam(yield ~ s(rate, k = 5, bs = "cv"),
                                      data = subset(final_results, ys_type == yield_type & error_degree == error & alignment_case == case & rate_types == rates & c_price == crop_price),
@@ -1372,7 +1380,6 @@ gen_prof_diff <- function(yield_type, error, case, rates, crop_price, dev_max, o
     clean_diff <- prof_est_clean - prof_est
     profit_loss_clean <- prof_opt - prof_est_clean
     profit_loss <- prof_opt - prof_est
-    perc_clean <- nrow(final_results_clean)
     
   }else{
     opt_rate_est <- NA
@@ -1380,7 +1387,6 @@ gen_prof_diff <- function(yield_type, error, case, rates, crop_price, dev_max, o
     clean_diff <- NA
     profit_loss_clean <- NA
     profit_loss <- NA
-    perc_clean <- NA
   }
 
   results <- as.data.frame(matrix(c(opt_rate_est, opt_rate_est_clean, clean_diff, profit_loss_clean, profit_loss, perc_clean), ncol = 6, nrow = 1)) %>%
@@ -1389,7 +1395,7 @@ gen_prof_diff <- function(yield_type, error, case, rates, crop_price, dev_max, o
   return(results)
 }
 
-get_est_data <- function(yield_type, error, case, rates, crop_price, dev_max){
+get_est_data <- function(yield_type, error, case, rates, crop_price, dev_max, opt_n){
   if (yield_type == "seed_response"){
     scam_res <- try(withTimeout(scam(yield ~ s(rate, k = 5, bs = "cv"),
                                            data = subset(final_results, ys_type == yield_type & error_degree == error & alignment_case == case & rate_types == rates & c_price == crop_price & max_dev == dev_max),
